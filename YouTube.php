@@ -84,11 +84,12 @@ class YouTube {
 		}
 
 		$ytid   = '';
-		$width = 560;
-		$height = 315;
 		$maxWidth = 960;
 		$maxHeight = 720;
+		$width = self::parseDimensionArg( $argv['width'], 560, $maxWidth );
+		$height = self::parseDimensionArg( $argv['height'], 315, $maxWidth );
 
+		// Sanitize input
 		if ( !empty( $argv['ytid'] ) ) {
 			$ytid = self::url2ytid( $argv['ytid'] );
 		} elseif ( !empty( $input ) ) {
@@ -101,19 +102,7 @@ class YouTube {
 		if ( $ytid === false ) {
 			return '';
 		}
-
-		// Support the pixel unit (px) in height/width parameters
-		// This way these parameters won't fail the filter_var() tests below if the
-		// user-supplied values were like 450px or 200px or something instead of
-		// 450 or 200
-		if ( !empty( $argv['height'] ) ) {
-			$argv['height'] = str_replace( 'px', '', $argv['height'] );
-		}
-
-		if ( !empty( $argv['width'] ) ) {
-			$argv['width'] = str_replace( 'px', '', $argv['width'] );
-		}
-
+		
 		// Define urlArgs - container for every URL argument.
 		$urlArgs = [];
 
@@ -134,21 +123,6 @@ class YouTube {
 		$argsStr = '';
 		if ( !empty( $urlArgs ) ) {
 			$argsStr = wfArrayToCgi( $urlArgs );
-		}
-
-		if (
-			!empty( $argv['width'] ) &&
-			filter_var( $argv['width'], FILTER_VALIDATE_INT, [ 'options' => [ 'min_range' => 0 ] ] ) &&
-			$argv['width'] <= $maxWidth
-		) {
-			$width = $argv['width'];
-		}
-		if (
-			!empty( $argv['height'] ) &&
-			filter_var( $argv['height'], FILTER_VALIDATE_INT, [ 'options' => [ 'min_range' => 0 ] ] ) &&
-			$argv['height'] <= $maxHeight
-		) {
-			$height = $argv['height'];
 		}
 
 		// Support YouTube's "enhanced privacy mode", in which "YouTube won’t
@@ -212,12 +186,13 @@ class YouTube {
 	 */
 	public static function embedArchiveOrg( $input, $argv, $isAudio ) {
 		$aoid   = '';
-		$width = 360
-		$height = 315
-		$maxWidth = 960;
-		$maxHeight = 720;
-
-		// If URL was entered, clean it to get ID
+		$width = $maxWidth = 960;
+		$height = $maxHeight = 720;
+		$width = self::parseDimensionArg( $argv['width'], 560, $maxWidth );
+		// Height of audio embed must always be 30px
+		$height = isAudio ? 30 : self::parseDimensionArg( $argv['height'], 315, $maxHeight );
+		
+		// Sanitize input
 		if ( !empty( $argv['aoid'] ) ) {
 			$aoid = self::url2aoid( $argv['aoid'] );
 		} elseif ( !empty( $input ) ) {
@@ -231,35 +206,6 @@ class YouTube {
 			return '';
 		}
 
-		// Support the pixel unit (px) in height/width parameters
-		// This way these parameters won't fail the filter_var() tests below if the
-		// user-supplied values were like 450px or 200px or something instead of
-		// 450 or 200
-		if ( !empty( $argv['height'] ) ) {
-			$argv['height'] = str_replace( 'px', '', $argv['height'] );
-		}
-		if ( !empty( $argv['width'] ) ) {
-			$argv['width'] = str_replace( 'px', '', $argv['width'] );
-		}
-
-		// Set width and height, if specified
-		// For audio embeds, custom height is not supported
-		if (
-			!empty( $argv['width'] ) &&
-			filter_var( $argv['width'], FILTER_VALIDATE_INT, [ 'options' => [ 'min_range' => 0 ] ] ) &&
-			$argv['width'] <= $maxWidth
-		) {
-			$width = $argv['width'];
-		}
-		if (
-			!isAudio &&
-			!empty( $argv['height'] ) &&
-			filter_var( $argv['height'], FILTER_VALIDATE_INT, [ 'options' => [ 'min_range' => 0 ] ] ) &&
-			$argv['height'] <= $maxHeight
-		) {
-			$height = $argv['height'];
-		}
-
 		// Return iframe embed object
 		if ( !empty( $aoid ) ) {
 			return "<iframe src=\"https://archive.org/embed/$aoid\" width=\"$width\" height=\"$height\" frameborder=\"0\" webkitallowfullscreen=\"true\" mozallowfullscreen=\"true\" allowfullscreen></iframe>";
@@ -268,11 +214,11 @@ class YouTube {
 
 	
 	public static function embedArchiveOrgVideo( $input, $argv ) {
-		return embedArchiveOrg( $input, $argv, false );
+		return self::embedArchiveOrg( $input, $argv, isAudio: false );
 	}
 
 	public static function embedArchiveOrgAudio( $input, $argv ) {
-		return embedArchiveOrg( $input, $argv, true );
+		return self::embedArchiveOrg( $input, $argv, isAudio: true );
 	}
 
 	//======================================================================
@@ -285,7 +231,7 @@ class YouTube {
 	 * @param string $url NicoNico video URL
 	 * @return string|bool Video ID on success, boolean false on failure
 	 */
-	public static function url2aoid( $url ) {
+	public static function url2nvid( $url ) {
 		$id = $url;
 
 		if ( preg_match( '/https:\/\/www\.nicovideo\.jp\/watch\/(.+)$/', $url, $preg ) ) {
@@ -309,12 +255,12 @@ class YouTube {
 	 */
 	public static function embedNicoVideo( $input, $argv ) {
 		$nvid = '';
-		$width = 320
-		$height = 180
 		$maxWidth = 960;
 		$maxHeight = 720;
+		$width = self::parseDimensionArg( $argv['width'], 320, $maxWidth );
+		$height = self::parseDimensionArg( $argv['height'], 180, $maxWidth );
 
-		// If URL was entered, clean it to get ID
+		// Sanitize input
 		if ( !empty( $argv['nvid'] ) ) {
 			$nvid = self::url2nvid( $argv['nvid'] );
 		} elseif ( !empty( $input ) ) {
@@ -328,38 +274,59 @@ class YouTube {
 			return '';
 		}
 
-		// Support the pixel unit (px) in height/width parameters
-		// This way these parameters won't fail the filter_var() tests below if the
-		// user-supplied values were like 450px or 200px or something instead of
-		// 450 or 200
-		if ( !empty( $argv['height'] ) ) {
-			$argv['height'] = str_replace( 'px', '', $argv['height'] );
-		}
-		if ( !empty( $argv['width'] ) ) {
-			$argv['width'] = str_replace( 'px', '', $argv['width'] );
-		}
-
-		// Set width and height, if specified
-		// For audio embeds, custom height is not supported
-		if (
-			!empty( $argv['width'] ) &&
-			filter_var( $argv['width'], FILTER_VALIDATE_INT, [ 'options' => [ 'min_range' => 0 ] ] ) &&
-			$argv['width'] <= $maxWidth
-		) {
-			$width = $argv['width'];
-		}
-		if (
-			!empty( $argv['height'] ) &&
-			filter_var( $argv['height'], FILTER_VALIDATE_INT, [ 'options' => [ 'min_range' => 0 ] ] ) &&
-			$argv['height'] <= $maxHeight
-		) {
-			$height = $argv['height'];
-		}
-
 		// Return Javascript embed object
 		if ( !empty( $nvid ) ) {
 			return "<script type=\"application/javascript\" src=\"https://embed.nicovideo.jp/watch/$nvid/script?w=$width&h=$height\"></script>"
 		}
 	}
 
+	//======================================================================
+	// DIMENSION HANDLER
+	//======================================================================
+
+	/**
+	 * Parse an argument representing a dimension and return a value appropriate
+	 * for usage in markup. The argument must be in absolute pixels and may
+	 * include a trailing 'px'
+	 *
+	 * The passed default will be returned if the argument is not parseable, and
+	 * the constraining range value will be returned if the argument is outside
+	 * the range.
+	 *
+	 * If not specified, max will default to $default and min will default to 0.
+	 * 
+	 *
+	 * @param string $value The argument value to parse
+	 * @param int $default The value to return if $value cannot be parsed
+	 * @param int|null $max The maximum range value; will default to $default
+	 * @param int $min The minimum range value; defaults to 0
+	 * @return int The parsed value as an integer
+	 */
+	private static function parseDimensionArg( $value, $default, $max = null, $min = 0 ) {
+		
+		if ( empty( $value ) ) {
+			return $default;
+		}
+
+		if ( $max === null ) {
+			$max = $default;
+		}
+
+		// strip pixel unit from value so it can be treated as an integer
+		$value = str_ireplace( 'px', '', $value );
+
+		// Don't use the min or max options on filter_var, so that we can return
+		// either the min or max range value if the parsed value is an integer
+		// but is outside the range. We only want to return the default if the
+		// value cannot be parsed.
+		$value = filter_var( $value, FILTER_VALIDATE_INT, [ 'options' => [ 'default' => $default ] ] );
+
+		if ( $value < $min ) {
+			$value = $min;
+		} elseif ( $value > $max ) {
+			$value = $max;
+		}
+
+		return $value;
+	}
 }

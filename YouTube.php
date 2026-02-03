@@ -225,7 +225,7 @@ class YouTube {
 		}
 
 		// Did we not get an ID at all? That can happen if someone enters outright
-		// gibberish and/or something that's not a YouTube URL.
+		// gibberish and/or something that's not an archive.org URL.
 		// Let's not even bother with generating useless HTML.
 		if ( $aoid === false ) {
 			return '';
@@ -322,7 +322,7 @@ class YouTube {
 		}
 
 		// Did we not get an ID at all? That can happen if someone enters outright
-		// gibberish and/or something that's not a YouTube URL.
+		// gibberish and/or something that's not a NicoNico URL.
 		// Let's not even bother with generating useless HTML.
 		if ( $nvid === false ) {
 			return '';
@@ -356,6 +356,7 @@ class YouTube {
 			$height = $argv['height'];
 		}
 
+		// Return Javascript embed object
 		if ( !empty( $nvid ) ) {
 			return "<script type=\"application/javascript\" src=\"https://embed.nicovideo.jp/watch/$nvid/script?w=$width&h=$height\"></script>"
 		}

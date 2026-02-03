@@ -298,6 +298,15 @@ class YouTube {
 		return $id;
 	}
 
+	
+	/**
+	 * Embeds NicoNico videos
+	 *
+	 * @param string $input
+	 * @param array $argv
+	 *
+	 * @return string
+	 */
 	public static function embedNicoVideo( $input, $argv ) {
 		$nvid = '';
 		$width = 320

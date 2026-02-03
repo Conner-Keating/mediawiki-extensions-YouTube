@@ -29,6 +29,10 @@
  * @todo smart <video> and <audio> tag
  */
 
+//======================================================================
+// YOUTUBE EMBED
+//======================================================================
+
 class YouTube {
 
 	/**
@@ -40,7 +44,7 @@ class YouTube {
 		$parser->setHook( 'youtube', [ __CLASS__, 'embedYouTube' ] );
 		$parser->setHook( 'aovideo', [ __CLASS__, 'embedArchiveOrgVideo' ] );
 		$parser->setHook( 'aoaudio', [ __CLASS__, 'embedArchiveOrgAudio' ] );
-		$parser->setHook( 'nicovideo', [ __CLASS__, 'embedNicovideo' ] );
+		$parser->setHook( 'nicovideo', [ __CLASS__, 'embedNicoVideo' ] );
 	}
 
 	/**
@@ -80,9 +84,12 @@ class YouTube {
 		}
 
 		$ytid   = '';
-		$width  = $width_max  = 425;
-		$height = $height_max = 355;
+		$maxWidth = 960;
+		$maxHeight = 720;
+		$width = self::parseDimensionArg( $argv['width'], 560, $maxWidth );
+		$height = self::parseDimensionArg( $argv['height'], 315, $maxWidth );
 
+		// Sanitize input
 		if ( !empty( $argv['ytid'] ) ) {
 			$ytid = self::url2ytid( $argv['ytid'] );
 		} elseif ( !empty( $input ) ) {
@@ -95,20 +102,7 @@ class YouTube {
 		if ( $ytid === false ) {
 			return '';
 		}
-
-		// Support the pixel unit (px) in height/width parameters, because apparently
-		// a lot of people use it there.
-		// This way these parameters won't fail the filter_var() tests below if the
-		// user-supplied values were like 450px or 200px or something instead of
-		// 450 or 200
-		if ( !empty( $argv['height'] ) ) {
-			$argv['height'] = str_replace( 'px', '', $argv['height'] );
-		}
-
-		if ( !empty( $argv['width'] ) ) {
-			$argv['width'] = str_replace( 'px', '', $argv['width'] );
-		}
-
+		
 		// Define urlArgs - container for every URL argument.
 		$urlArgs = [];
 
@@ -129,28 +123,6 @@ class YouTube {
 		$argsStr = '';
 		if ( !empty( $urlArgs ) ) {
 			$argsStr = wfArrayToCgi( $urlArgs );
-		}
-
-		// If the type argument wasn't supplied, default to HTML5, since that's
-		// what YouTube offers by default as well
-		$width = 560;
-		$height = 315;
-		$maxWidth = 960;
-		$maxHeight = 720;
-
-		if (
-			!empty( $argv['width'] ) &&
-			filter_var( $argv['width'], FILTER_VALIDATE_INT, [ 'options' => [ 'min_range' => 0 ] ] ) &&
-			$argv['width'] <= $maxWidth
-		) {
-			$width = $argv['width'];
-		}
-		if (
-			!empty( $argv['height'] ) &&
-			filter_var( $argv['height'], FILTER_VALIDATE_INT, [ 'options' => [ 'min_range' => 0 ] ] ) &&
-			$argv['height'] <= $maxHeight
-		) {
-			$height = $argv['height'];
 		}
 
 		// Support YouTube's "enhanced privacy mode", in which "YouTube won’t
@@ -177,10 +149,21 @@ class YouTube {
 		}
 	}
 
-	public static function url2aovid( $url ) {
+
+	//======================================================================
+	// ARCHIVE.ORG EMBED
+	//======================================================================
+	
+	/**
+	 * Get an archive.org video/audio item ID from a URL
+	 *
+	 * @param string $url Archive.org video/audio URL
+	 * @return string|bool Video/audio ID on success, boolean false on failure
+	 */
+	public static function url2aoid( $url ) {
 		$id = $url;
 
-		if ( preg_match( '/http:\/\/www\.archive\.org\/download\/(.+)\.flv$/', $url, $preg ) ) {
+		if ( preg_match( '/https:\/\/www\.archive\.org\/details\/(.+)$/', $url, $preg ) ) {
 			$id = $preg[1];
 		}
 
@@ -190,120 +173,160 @@ class YouTube {
 		return $id;
 	}
 
-	public static function embedArchiveOrgVideo( $input, $argv, $parser ) {
-		$aovid   = '';
-		$width  = $width_max  = 320;
-		$height = $height_max = 263;
-
-		if ( !empty( $argv['aovid'] ) ) {
-			$aovid = self::url2aovid( $argv['aovid'] );
+	/**
+	 * Embeds archive.org audio and video.
+	 * This technically also works for text/image/software embeds, however
+	 * those do not fall under the scope of this extension
+	 *
+	 * @param string $input
+	 * @param array $argv
+	 * @param bool $isAudio 
+	 *
+	 * @return string
+	 */
+	public static function embedArchiveOrg( $input, $argv, $isAudio ) {
+		$aoid   = '';
+		$width = $maxWidth = 960;
+		$height = $maxHeight = 720;
+		$width = self::parseDimensionArg( $argv['width'], 560, $maxWidth );
+		// Height of audio embed must always be 30px
+		$height = isAudio ? 30 : self::parseDimensionArg( $argv['height'], 315, $maxHeight );
+		
+		// Sanitize input
+		if ( !empty( $argv['aoid'] ) ) {
+			$aoid = self::url2aoid( $argv['aoid'] );
 		} elseif ( !empty( $input ) ) {
-			$aovid = self::url2aovid( $input );
-		}
-		if (
-			!empty( $argv['width'] ) &&
-			settype( $argv['width'], 'integer' ) &&
-			( $width_max >= $argv['width'] )
-		) {
-			$width = $argv['width'];
-		}
-		if (
-			!empty( $argv['height'] ) &&
-			settype( $argv['height'], 'integer' ) &&
-			( $height_max >= $argv['height'] )
-		) {
-			$height = $argv['height'];
+			$aoid = self::url2aoid( $input );
 		}
 
-		if ( !empty( $aovid ) ) {
-			$url = "http://www.archive.org/download/{$aovid}.flv";
-			return "<object type=\"application/x-shockwave-flash\" data=\"http://www.archive.org/flv/FlowPlayerWhite.swf\" width=\"{$width}\" height=\"{$height}\"><param name=\"movie\" value=\"http://www.archive.org/flv/FlowPlayerWhite.swf\"/><param name=\"flashvars\" value=\"config={loop: false, videoFile: '{$url}', autoPlay: false}\"/></object>";
+		// Did we not get an ID at all? That can happen if someone enters outright
+		// gibberish and/or something that's not an archive.org URL.
+		// Let's not even bother with generating useless HTML.
+		if ( $aoid === false ) {
+			return '';
+		}
+
+		// Return iframe embed object
+		if ( !empty( $aoid ) ) {
+			return "<iframe src=\"https://archive.org/embed/$aoid\" width=\"$width\" height=\"$height\" frameborder=\"0\" webkitallowfullscreen=\"true\" mozallowfullscreen=\"true\" allowfullscreen></iframe>";
 		}
 	}
 
-	public static function url2aoaid( $url ) {
-		$id = $url;
-
-		if ( preg_match( '/http:\/\/www\.archive\.org\/details\/(.+)$/', $url, $preg ) ) {
-			$id = $preg[1];
-		}
-
-		preg_match( '/([0-9A-Za-z_\/.-]+)/', $id, $preg );
-		$id = $preg[1];
-
-		return $id;
+	
+	public static function embedArchiveOrgVideo( $input, $argv ) {
+		return self::embedArchiveOrg( $input, $argv, isAudio: false );
 	}
 
-	public static function embedArchiveOrgAudio( $input, $argv, $parser ) {
-		$aoaid   = '';
-		$width  = $width_max  = 500;
-		$height = $height_max = 190;
-
-		if ( !empty( $argv['aoaid'] ) ) {
-			$aoaid = self::url2aoaid( $argv['aoaid'] );
-		} elseif ( !empty( $input ) ) {
-			$aoaid = self::url2aoaid( $input );
-		}
-		if (
-			!empty( $argv['width'] ) &&
-			settype( $argv['width'], 'integer' ) &&
-			( $width_max >= $argv['width'] )
-		) {
-			$width = $argv['width'];
-		}
-		if (
-			!empty( $argv['height'] ) &&
-			settype( $argv['height'], 'integer' ) &&
-			( $height_max >= $argv['height'] )
-		) {
-			$height = $argv['height'];
-		}
-
-		if ( !empty( $aoaid ) ) {
-			$uri = "https://archive.org/embed/$aoaid";
-			if ( !empty( $argv['playlist'] ) ) {
-				$uri .= "&playlist=" . (bool)$argv['playlist'];
-			}
-			return "<iframe data-extension=\"youtube\" src=\"$uri\" width=\"$width\" height=\"$height\" frameborder=\"0\" webkitallowfullscreen=\"true\" mozallowfullscreen=\"true\" allowfullscreen></iframe>";
-		}
+	public static function embedArchiveOrgAudio( $input, $argv ) {
+		return self::embedArchiveOrg( $input, $argv, isAudio: true );
 	}
 
+	//======================================================================
+	// NICONICO EMBED
+	//======================================================================
+
+	/**
+	 * Get a NicoNico video item ID from a URL
+	 *
+	 * @param string $url NicoNico video URL
+	 * @return string|bool Video ID on success, boolean false on failure
+	 */
 	public static function url2nvid( $url ) {
 		$id = $url;
 
-		preg_match( '/([0-9A-Za-z]+)/', $id, $preg );
+		if ( preg_match( '/https:\/\/www\.nicovideo\.jp\/watch\/(.+)$/', $url, $preg ) ) {
+			$id = $preg[1];
+		}
+
+		preg_match( '/([0-9A-Za-z_\/.-]+)/', $id, $preg );
 		$id = $preg[1];
 
 		return $id;
 	}
 
-	public static function embedNicovideo( $input, $argv, $parser ) {
+	
+	/**
+	 * Embeds NicoNico videos
+	 *
+	 * @param string $input
+	 * @param array $argv
+	 *
+	 * @return string
+	 */
+	public static function embedNicoVideo( $input, $argv ) {
 		$nvid = '';
-		$width  = 400;
-		$height = 326;
+		$maxWidth = 960;
+		$maxHeight = 720;
+		$width = self::parseDimensionArg( $argv['width'], 320, $maxWidth );
+		$height = self::parseDimensionArg( $argv['height'], 180, $maxWidth );
 
+		// Sanitize input
 		if ( !empty( $argv['nvid'] ) ) {
 			$nvid = self::url2nvid( $argv['nvid'] );
 		} elseif ( !empty( $input ) ) {
 			$nvid = self::url2nvid( $input );
 		}
-		if (
-			!empty( $argv['width'] ) &&
-			settype( $argv['width'], 'integer' )
-		) {
-			$width = $argv['width'];
-		}
-		if (
-			!empty( $argv['height'] ) &&
-			settype( $argv['height'], 'integer' )
-		) {
-			$height = $argv['height'];
+
+		// Did we not get an ID at all? That can happen if someone enters outright
+		// gibberish and/or something that's not a NicoNico URL.
+		// Let's not even bother with generating useless HTML.
+		if ( $nvid === false ) {
+			return '';
 		}
 
+		// Return Javascript embed object
 		if ( !empty( $nvid ) ) {
-			$url = "https://embed.nicovideo.jp/watch/{$nvid}";
-			return "<iframe data-extension=\"youtube\" width=\"{$width}\" height=\"{$height}\" src=\"{$url}\"></iframe>";
+			return "<script type=\"application/javascript\" src=\"https://embed.nicovideo.jp/watch/$nvid/script?w=$width&h=$height\"></script>"
 		}
 	}
 
+	//======================================================================
+	// DIMENSION HANDLER
+	//======================================================================
+
+	/**
+	 * Parse an argument representing a dimension and return a value appropriate
+	 * for usage in markup. The argument must be in absolute pixels and may
+	 * include a trailing 'px'
+	 *
+	 * The passed default will be returned if the argument is not parseable, and
+	 * the constraining range value will be returned if the argument is outside
+	 * the range.
+	 *
+	 * If not specified, max will default to $default and min will default to 0.
+	 * 
+	 *
+	 * @param string $value The argument value to parse
+	 * @param int $default The value to return if $value cannot be parsed
+	 * @param int|null $max The maximum range value; will default to $default
+	 * @param int $min The minimum range value; defaults to 0
+	 * @return int The parsed value as an integer
+	 */
+	private static function parseDimensionArg( $value, $default, $max = null, $min = 0 ) {
+		
+		if ( empty( $value ) ) {
+			return $default;
+		}
+
+		if ( $max === null ) {
+			$max = $default;
+		}
+
+		// strip pixel unit from value so it can be treated as an integer
+		$value = str_ireplace( 'px', '', $value );
+
+		// Don't use the min or max options on filter_var, so that we can return
+		// either the min or max range value if the parsed value is an integer
+		// but is outside the range. We only want to return the default if the
+		// value cannot be parsed.
+		$value = filter_var( $value, FILTER_VALIDATE_INT, [ 'options' => [ 'default' => $default ] ] );
+
+		if ( $value < $min ) {
+			$value = $min;
+		} elseif ( $value > $max ) {
+			$value = $max;
+		}
+
+		return $value;
+	}
 }

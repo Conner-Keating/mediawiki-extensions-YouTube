@@ -163,7 +163,7 @@ class YouTube {
 	public static function url2aoid( $url ) {
 		$id = $url;
 
-		if ( preg_match( '/https:\/\/www\.archive\.org\/details\/(.+)$/', $url, $preg ) ) {
+		if ( preg_match( '/https:\/\/archive\.org\/details\/(.+)$/', $url, $preg ) ) {
 			$id = $preg[1];
 		}
 
@@ -184,13 +184,16 @@ class YouTube {
 	 *
 	 * @return string
 	 */
-	public static function embedArchiveOrg( $input, $argv, $isAudio ) {
+	public static function embedArchiveOrg( $input, $argv, $isAudio, $parser ) {
+    
 		$aoid   = '';
+        
 		$width = $maxWidth = 960;
 		$height = $maxHeight = 720;
 		$width = self::parseDimensionArg( $argv['width'], 560, $maxWidth );
+        
 		// Height of audio embed must always be 30px
-		$height = isAudio ? 30 : self::parseDimensionArg( $argv['height'], 315, $maxHeight );
+		$height = $isAudio ? 30 : self::parseDimensionArg( $argv['height'], 315, $maxHeight );
 		
 		// Sanitize input
 		if ( !empty( $argv['aoid'] ) ) {
@@ -208,17 +211,17 @@ class YouTube {
 
 		// Return iframe embed object
 		if ( !empty( $aoid ) ) {
-			return "<iframe src=\"https://archive.org/embed/$aoid\" width=\"$width\" height=\"$height\" frameborder=\"0\" webkitallowfullscreen=\"true\" mozallowfullscreen=\"true\" allowfullscreen></iframe>";
+			return "<iframe src=\"https://archive.org/embed/$aoid\" width=\"$width\" height=\"$height\" frameborder=\"0\" webkitallowfullscreen=\"true\" mozallowfullscreen=\"true\" allowfullscreen><!/iframe>";
 		}
 	}
 
 	
-	public static function embedArchiveOrgVideo( $input, $argv ) {
-		return self::embedArchiveOrg( $input, $argv, isAudio: false );
+	public static function embedArchiveOrgVideo( $input, $argv, $parser ) {
+		return self::embedArchiveOrg( $input, $argv, false, $parser );
 	}
 
-	public static function embedArchiveOrgAudio( $input, $argv ) {
-		return self::embedArchiveOrg( $input, $argv, isAudio: true );
+	public static function embedArchiveOrgAudio( $input, $argv, $parser ) {
+		return self::embedArchiveOrg( $input, $argv, true, $parser );
 	}
 
 	//======================================================================
@@ -276,7 +279,7 @@ class YouTube {
 
 		// Return Javascript embed object
 		if ( !empty( $nvid ) ) {
-			return "<script type=\"application/javascript\" src=\"https://embed.nicovideo.jp/watch/$nvid/script?w=$width&h=$height\"></script>"
+			return "<script type=\"application/javascript\" src=\"https://embed.nicovideo.jp/watch/$nvid/script?w=$width&h=$height\"></script>";
 		}
 	}
 

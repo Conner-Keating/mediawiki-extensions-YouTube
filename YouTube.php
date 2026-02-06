@@ -1,7 +1,7 @@
 <?php
 /**
  * Parser hook-based extension to show audio and video players
- * from YouTube and other similar sites.
+ * from YouTube, Archive.org, and NicoNico.
  *
  * @file
  * @ingroup Extensions
@@ -44,6 +44,8 @@ class YouTube {
 		$parser->setHook( 'youtube', [ __CLASS__, 'embedYouTube' ] );
 		$parser->setHook( 'aovideo', [ __CLASS__, 'embedArchiveOrgVideo' ] );
 		$parser->setHook( 'aoaudio', [ __CLASS__, 'embedArchiveOrgAudio' ] );
+		$parser->setHook( 'vimeo', [ __CLASS__, 'embedVideo' ] );
+		$parser->setHook( 'dailymotion', [ __CLASS__, 'embedDailymotion' ] );
 		$parser->setHook( 'nicovideo', [ __CLASS__, 'embedNicoVideo' ] );
 	}
 
@@ -55,7 +57,7 @@ class YouTube {
 	 */
 	public static function url2ytid( $url ) {
 		// @see http://linuxpanda.wordpress.com/2013/07/24/ultimate-best-regex-pattern-to-get-grab-parse-youtube-video-id-from-any-youtube-link-url/
-		$pattern = '~(?:http|https|)(?::\/\/|)(?:www.|)(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/ytscreeningroom\?v=|\/feeds\/api\/videos\/|\/user\S*[^\w\-\s]|\S*[^\w\-\s]))([\w\-]{11})[a-z0-9;:@?&%=+\/\$_.-]*~i';
+		$pattern = '~(?:http|https|)(?::\/\/|)(?:www\.|)(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/ytscreeningroom\?v=|\/feeds\/api\/videos\/|\/user\S*[^\w\-\s]|\S*[^\w\-\s]))([\w\-]{11})[a-z0-9;:@?&%=+\/\$_.-]*~i';
 		$id = false;
 
 		if ( preg_match( $pattern, $url, $preg ) ) {
@@ -68,6 +70,8 @@ class YouTube {
 	}
 
 	/**
+	 * Embeds a YouTube video.
+	 *
 	 * @param string $input
 	 * @param array $argv
 	 * @param Parser $parser
@@ -78,7 +82,7 @@ class YouTube {
 		global $wgYouTubeEnableLazyLoad;
 
 		// Loads necessary modules for lazy loading:
-		// Video poster image will be loaded first and replaced by the actual video once clicked
+		// Video poster image will be loaded first and replaced by the actual video once clicked.
 		if ( $wgYouTubeEnableLazyLoad ) {
 			$parser->getOutput()->addModules( [ 'ext.youtube.lazyload' ] );
 		}
@@ -89,24 +93,22 @@ class YouTube {
 		$width = self::parseDimensionArg( $argv['width'], 560, $maxWidth );
 		$height = self::parseDimensionArg( $argv['height'], 315, $maxWidth );
 
-		// Sanitize input
+		// Sanitize input.
 		if ( !empty( $argv['ytid'] ) ) {
 			$ytid = self::url2ytid( $argv['ytid'] );
 		} elseif ( !empty( $input ) ) {
 			$ytid = self::url2ytid( $input );
 		}
 
-		// Did we not get an ID at all? That can happen if someone enters outright
-		// gibberish and/or something that's not a YouTube URL.
-		// Let's not even bother with generating useless HTML.
+		// If URL cannot be parsed at all, return an empty string.
 		if ( $ytid === false ) {
 			return '';
 		}
 		
-		// Define urlArgs - container for every URL argument.
+		// Define urlArgs container for every URL argument.
 		$urlArgs = [];
 
-		// Got a timestamp to start on? If yes, include it in URL.
+		// If a starting timestamp is provided, include it in URL.
 		if (
 			!empty( $argv['start'] ) &&
 			filter_var( $argv['start'], FILTER_VALIDATE_INT, [ 'options' => [ 'min_range' => 0 ] ] )
@@ -114,7 +116,7 @@ class YouTube {
 			$urlArgs['start'] = $argv['start'];
 		}
 
-		// Adds ?autoplay=1 to the URL is the param is set
+		// Adds ?autoplay=1 to the URL if the param is set.
 		if ( !empty( $argv['autoplay'] ) || $wgYouTubeEnableLazyLoad ) {
 			$urlArgs['autoplay'] = '1';
 		}
@@ -125,9 +127,9 @@ class YouTube {
 			$argsStr = wfArrayToCgi( $urlArgs );
 		}
 
-		// Support YouTube's "enhanced privacy mode", in which "YouTube won’t
+		// Support YouTube's "enhanced privacy mode", in which "YouTube won't
 		// store information about visitors on your web page unless they play
-		// the video" if the privacy argument was supplied
+		// the video" if the privacy argument was supplied.
 		// @see https://support.google.com/youtube/answer/171780?expand=PrivacyEnhancedMode#privacy
 		$urlBase = '//www.youtube-nocookie.com/embed/';
 
@@ -155,7 +157,7 @@ class YouTube {
 	//======================================================================
 	
 	/**
-	 * Get an archive.org video/audio item ID from a URL
+	 * Get an archive.org video/audio item ID from a URL.
 	 *
 	 * @param string $url Archive.org video/audio URL
 	 * @return string|bool Video/audio ID on success, boolean false on failure
@@ -163,7 +165,7 @@ class YouTube {
 	public static function url2aoid( $url ) {
 		$id = $url;
 
-		if ( preg_match( '/https:\/\/archive\.org\/details\/(.+)$/', $url, $preg ) ) {
+		if ( preg_match( '/(?:http|https|)(?::\/\/|)(?:www\.|)archive\.org\/details\/(.+)$/', $url, $preg ) ) {
 			$id = $preg[1];
 		}
 
@@ -176,11 +178,12 @@ class YouTube {
 	/**
 	 * Embeds archive.org audio and video.
 	 * This technically also works for text/image/software embeds, however
-	 * those do not fall under the scope of this extension
+	 * those do not fall under the scope of this extension.
 	 *
 	 * @param string $input
 	 * @param array $argv
 	 * @param bool $isAudio 
+	 * @param Parser $parser
 	 *
 	 * @return string
 	 */
@@ -192,26 +195,24 @@ class YouTube {
 		$height = $maxHeight = 720;
 		$width = self::parseDimensionArg( $argv['width'], 560, $maxWidth );
         
-		// Height of audio embed must always be 30px
+		// Height of audio embed must always be 30px.
 		$height = $isAudio ? 30 : self::parseDimensionArg( $argv['height'], 315, $maxHeight );
 		
-		// Sanitize input
+		// Sanitize input.
 		if ( !empty( $argv['aoid'] ) ) {
 			$aoid = self::url2aoid( $argv['aoid'] );
 		} elseif ( !empty( $input ) ) {
 			$aoid = self::url2aoid( $input );
 		}
 
-		// Did we not get an ID at all? That can happen if someone enters outright
-		// gibberish and/or something that's not an archive.org URL.
-		// Let's not even bother with generating useless HTML.
+		// If URL cannot be parsed at all, return an empty string.
 		if ( $aoid === false ) {
 			return '';
 		}
 
-		// Return iframe embed object
+		// Return iframe embed object.
 		if ( !empty( $aoid ) ) {
-			return "<iframe src=\"https://archive.org/embed/$aoid\" width=\"$width\" height=\"$height\" frameborder=\"0\" webkitallowfullscreen=\"true\" mozallowfullscreen=\"true\" allowfullscreen><!/iframe>";
+			return "<iframe src=\"https://archive.org/embed/$aoid\" width=\"$width\" height=\"$height\" frameborder=\"0\" webkitallowfullscreen=\"true\" mozallowfullscreen=\"true\" allowfullscreen></iframe>";
 		}
 	}
 
@@ -225,11 +226,128 @@ class YouTube {
 	}
 
 	//======================================================================
+	// VIMEO EMBED
+	//======================================================================
+
+	/**
+	 * Get a Vimeo video ID from a URL.
+	 *
+	 * @param string $url Vime video URL
+	 * @return string|bool Video ID on success, boolean false on failure
+	 */
+	public static function url2vimeoid( $url ) {
+		$id = $url;
+
+		if ( preg_match( '/(?:http|https|)(?::\/\/|)(?:www\.|)vimeo\.com\/details\/(.+)$/', $url, $preg ) ) {
+			$id = $preg[1];
+		}
+
+		preg_match( '/([0-9A-Za-z_\/.-]+)/', $id, $preg );
+		$id = $preg[1];
+
+		return $id;
+	}
+
+	/**
+	 * Embeds Vimeo videos.
+	 *
+	 * @param string $input
+	 * @param array $argv
+	 * @param Parser $parser
+	 *
+	 * @return string
+	 */
+	public static function embedVimeo( $input, $argv, $parser ) {
+    
+		$vimeoid   = '';
+        
+		$width = $maxWidth = 960;
+		$height = $maxHeight = 720;
+		$width = self::parseDimensionArg( $argv['width'], 640, $maxWidth );
+		$height = self::parseDimensionArg( $argv['height'], 360, $maxHeight );
+		
+		// Sanitize input.
+		if ( !empty( $argv['vimeoid'] ) ) {
+			$vimeoid = self::url2vimeoid( $argv['vimeoid'] );
+		} elseif ( !empty( $input ) ) {
+			$vimeoid = self::url2vimeoid( $input );
+		}
+
+		// If URL cannot be parsed at all, return an empty string.
+		if ( $vimeoid === false ) {
+			return '';
+		}
+
+		// Return iframe embed object.
+		if ( !empty( $vimeoid ) ) {
+			return "<iframe title=\"vimeo-player\" src=\"https://player.vimeo.com/video/$vimeoid\" width=\"$width\" height=\"$height\" frameborder=\"0\" referrerpolicy=\"strict-origin-when-cross-origin\" allow=\"autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share\" allowfullscreen></iframe>";
+		}
+	}
+	
+	//======================================================================
+	// DAILYMOTION EMBED
+	//======================================================================
+
+	/**
+	 * Get a Dailymotion video ID from a URL.
+	 *
+	 * @param string $url Vime video URL
+	 * @return string|bool Video ID on success, boolean false on failure
+	 */
+	public static function url2dmid( $url ) {
+		$id = $url;
+
+		if ( preg_match( '/(?:http|https|)(?::\/\/|)(?:www\.|)dailymotion\.com\/video\/(.+)$/', $url, $preg ) ) {
+			$id = $preg[1];
+		}
+
+		preg_match( '/([0-9A-Za-z_\/.-]+)/', $id, $preg );
+		$id = $preg[1];
+
+		return $id;
+	}
+
+	/**
+	 * Embeds Dailymotion videos.
+	 *
+	 * @param string $input
+	 * @param array $argv
+	 * @param Parser $parser
+	 *
+	 * @return string
+	 */
+	public static function embedDailymotion( $input, $argv, $parser ) {
+    
+		$dmid   = '';
+        
+		$width = $maxWidth = 960;
+		$height = $maxHeight = 720;
+		$width = self::parseDimensionArg( $argv['width'], 640, $maxWidth );
+		$height = self::parseDimensionArg( $argv['height'], 360, $maxHeight );
+		
+		// Sanitize input.
+		if ( !empty( $argv['dmid'] ) ) {
+			$dmid = self::url2dmid( $argv['dmid'] );
+		} elseif ( !empty( $input ) ) {
+			$dmid = self::url2dmid( $input );
+		}
+
+		// If URL cannot be parsed at all, return an empty string.
+		if ( $dmid === false ) {
+			return '';
+		}
+
+		// Return iframe embed object.
+		if ( !empty( $dmid ) ) {
+			return "<iframe src=\"https://geo.dailymotion.com/player.html?video=$dmid\" width=\"$width\" height=\"$height\" frameborder=\"0\" webkitallowfullscreen=\"true\" mozallowfullscreen=\"true\" allowfullscreen></iframe>";
+	}
+	
+	//======================================================================
 	// NICONICO EMBED
 	//======================================================================
 
 	/**
-	 * Get a NicoNico video item ID from a URL
+	 * Get a NicoNico video item ID from a URL.
 	 *
 	 * @param string $url NicoNico video URL
 	 * @return string|bool Video ID on success, boolean false on failure
@@ -237,7 +355,7 @@ class YouTube {
 	public static function url2nvid( $url ) {
 		$id = $url;
 
-		if ( preg_match( '/https:\/\/www\.nicovideo\.jp\/watch\/(.+)$/', $url, $preg ) ) {
+		if ( preg_match( '/(?:http|https|)(?::\/\/|)(?:www\.|)nicovideo\.jp\/watch\/(.+)$/', $url, $preg ) ) {
 			$id = $preg[1];
 		}
 
@@ -249,10 +367,11 @@ class YouTube {
 
 	
 	/**
-	 * Embeds NicoNico videos
+	 * Embeds NicoNico videos.
 	 *
 	 * @param string $input
 	 * @param array $argv
+	 * @param Parser $parser
 	 *
 	 * @return string
 	 */
@@ -263,21 +382,19 @@ class YouTube {
 		$width = self::parseDimensionArg( $argv['width'], 320, $maxWidth );
 		$height = self::parseDimensionArg( $argv['height'], 180, $maxWidth );
 
-		// Sanitize input
+		// Sanitize input.
 		if ( !empty( $argv['nvid'] ) ) {
 			$nvid = self::url2nvid( $argv['nvid'] );
 		} elseif ( !empty( $input ) ) {
 			$nvid = self::url2nvid( $input );
 		}
 
-		// Did we not get an ID at all? That can happen if someone enters outright
-		// gibberish and/or something that's not a NicoNico URL.
-		// Let's not even bother with generating useless HTML.
+		// If URL cannot be parsed at all, return an empty string.
 		if ( $nvid === false ) {
 			return '';
 		}
 
-		// Return Javascript embed object
+		// Return Javascript embed object.
 		if ( !empty( $nvid ) ) {
 			return "<script type=\"application/javascript\" src=\"https://embed.nicovideo.jp/watch/$nvid/script?w=$width&h=$height\"></script>";
 		}
@@ -290,7 +407,7 @@ class YouTube {
 	/**
 	 * Parse an argument representing a dimension and return a value appropriate
 	 * for usage in markup. The argument must be in absolute pixels and may
-	 * include a trailing 'px'
+	 * include a trailing 'px'.
 	 *
 	 * The passed default will be returned if the argument is not parseable, and
 	 * the constraining range value will be returned if the argument is outside
@@ -315,15 +432,14 @@ class YouTube {
 			$max = $default;
 		}
 
-		// strip pixel unit from value so it can be treated as an integer
+		// Strip pixel unit from value so it can be treated as an integer.
 		$value = str_ireplace( 'px', '', $value );
 
-		// Don't use the min or max options on filter_var, so that we can return
-		// either the min or max range value if the parsed value is an integer
-		// but is outside the range. We only want to return the default if the
-		// value cannot be parsed.
+		// If dimension cannot be parsed, the default value will be returned.
 		$value = filter_var( $value, FILTER_VALIDATE_INT, [ 'options' => [ 'default' => $default ] ] );
 
+		// If a dimension can be parsed but is out-of-range, the nearest valid
+		// dimension will be returned.
 		if ( $value < $min ) {
 			$value = $min;
 		} elseif ( $value > $max ) {
